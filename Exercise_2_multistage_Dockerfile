@@ -1,0 +1,28 @@
+# builder stage
+FROM golang:1.23-alpine AS builder
+
+## copy the go source code over and build the binary
+COPY . /go/src
+WORKDIR /go/src
+RUN go build echo-server.go
+
+# app exec stage
+####################################
+# separate & new image starts here!#
+####################################
+FROM alpine:latest
+
+# prepare file system etc
+RUN mkdir -p /app && adduser -S -D -H -h /app appuser
+
+# get the compiled binary from the previous stage
+COPY --from=builder /go/src/echo-server /app/echo-server
+
+# prepare runtime env
+RUN chown -R appuser /app
+USER appuser
+WORKDIR /app
+
+# expose app port & set default command
+EXPOSE 8080
+CMD ["/app/echo-server"]
