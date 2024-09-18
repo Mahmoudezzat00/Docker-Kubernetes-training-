@@ -1,0 +1,70 @@
+# declaration of a headless service
+apiVersion: v1
+kind: Service
+metadata:
+  name: stateful-nginx
+  labels:
+    app: stateful-nginx
+spec:
+  ports:
+  - port: 80
+    name: web
+  # by assigning the value 'None' to 'clusterIP' the service becomes "headless".
+  # a headless service has no separate cluster internal IP.
+  clusterIP: None
+  selector:
+    app: stateful-nginx
+# with '---' two different resources can be separated even though they reside in the same file
+---
+# declaration of a statefulset (sts)
+# deployments belong to api group 'apps' in version 'v1'
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: web
+spec:
+  # link the statefulset to its headless service
+  serviceName: "stateful-nginx"
+  replicas: 2
+  selector:
+    matchLabels:
+      app: stateful-nginx
+  # the following section describes the pods that will be created.
+  template:
+    metadata:
+      labels:
+        app: stateful-nginx
+    spec:
+      # initContainers is a list similar to 'containers'. 
+      # all containers defined here, will be executed prior to the regular container(s)
+      # initContainers have access to volumes defined for the pod 
+      initContainers:
+      - name: setup
+        image: alpine:latest
+        command:
+        - /bin/sh
+        - -c
+        - echo $(hostname) >> /work-dir/index.html
+        volumeMounts:
+        - name: www
+          mountPath: /work-dir
+      containers:
+      - name: nginx
+        image: nginx:mainline
+        ports:
+        - containerPort: 80
+          name: web
+        volumeMounts:
+        - name: www
+          mountPath: /usr/share/nginx/html
+  # statefulsets allow to specify required storage as a template
+  # a new PVC is created for each replica of the statefulset
+  # hence each replica has access to a dedicated & individual storage
+  volumeClaimTemplates:
+  - metadata:
+      name: www
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      resources:
+        requests:
+          storage: 1Gi
